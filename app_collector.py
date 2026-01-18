@@ -49,23 +49,48 @@ class AppCollector:
         except Exception:
             return ""
     
-    def _check_url_availability(self, url: str, timeout: int = 3) -> bool:
-        """Проверить доступность URL"""
+    def _check_url_availability(self, url: str, timeout: int = 3) -> Dict[str, Any]:
+        """Проверить доступность URL и вернуть детальную информацию"""
         if not url:
-            return False
+            return {'available': False, 'error': 'URL не указан'}
         
         try:
             # Удаляем префикс ssh:// если есть
             if url.startswith('ssh://'):
-                return False  # SSH не проверяем через HTTP
+                return {'available': None, 'error': 'SSH протокол'}
+            
+            import time
+            start_time = time.time()
             
             # Делаем HEAD запрос для проверки доступности
             req = urllib.request.Request(url, method='HEAD')
             req.add_header('User-Agent', 'Mozilla/5.0')
             with urllib.request.urlopen(req, timeout=timeout) as response:
-                return response.status in [200, 301, 302, 303, 307, 308]
-        except (urllib.error.URLError, urllib.error.HTTPError, Exception):
-            return False
+                response_time = int((time.time() - start_time) * 1000)  # в миллисекундах
+                status_code = response.status
+                is_available = status_code in [200, 301, 302, 303, 307, 308]
+                
+                return {
+                    'available': is_available,
+                    'status_code': status_code,
+                    'response_time': response_time
+                }
+        except urllib.error.HTTPError as e:
+            return {
+                'available': False,
+                'status_code': e.code,
+                'error': f'HTTP {e.code}: {e.reason}'
+            }
+        except urllib.error.URLError as e:
+            return {
+                'available': False,
+                'error': str(e.reason) if hasattr(e, 'reason') else str(e)
+            }
+        except Exception as e:
+            return {
+                'available': False,
+                'error': str(e)
+            }
     
     def _generate_recommended_url(self, app: Dict[str, Any]) -> str:
         """Генерирует рекомендуемый URL на основе данных приложения"""
@@ -452,10 +477,8 @@ class AppCollector:
                 app['url_available'] = None
                 app['url_check'] = {'available': None, 'error': 'URL не настроен'}
             
-            # Добавляем информацию о маршрутизации после добавления всех данных
-            routing_info = self._get_routing_info(app)
-            if any(routing_info.values()):
-                app['routing'] = routing_info
+            # Информация о маршрутизации уже собирается в методах collect_docker_apps и collect_lxd_apps
+            # через поля proxy_listen, proxy_connect, port_mappings и т.д.
         
         return apps
     
