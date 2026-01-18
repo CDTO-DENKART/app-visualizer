@@ -726,12 +726,174 @@ function showAppDetails(nodeId) {
         }
     }
     
+    // Добавляем раздел Тестирование
+    const testCommands = getTestCommands(app);
+    if (testCommands && testCommands.length > 0) {
+        html += `<div class="detail-item" style="border-top: 2px solid #ddd; margin-top: 12px; padding-top: 12px;"><strong>🔍 Тестирование</strong><div style="margin-top: 8px;">`;
+        testCommands.forEach((cmd, idx) => {
+            if (cmd.note) {
+                // Если это примечание, отображаем как текст
+                html += `<div style="margin-bottom: 12px; padding: 8px; background: #fff3cd; border-left: 3px solid #ffc107; border-radius: 3px; font-size: 0.9em; color: #856404;">`;
+                html += `<strong>ℹ️ Примечание:</strong> ${cmd.note}`;
+                html += `</div>`;
+            } else {
+                // Компактное отображение теста - только название и кнопка
+                const commandId = `test-cmd-${idx}-${Date.now()}`;
+                const testId = `test-${idx}-${Date.now()}`;
+                const safeLabel = (cmd.label || 'Тест').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, ' ');
+                const safeCommand = cmd.command.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, ' ');
+                
+                html += `<div style="margin-bottom: 10px; padding: 10px; background: #f8f9fa; border-radius: 5px; border: 1px solid #dee2e6;">`;
+                html += `<div style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">`;
+                html += `<div style="flex: 1;">`;
+                html += `<div style="font-weight: 500; color: #495057; margin-bottom: 4px;">${cmd.label || 'Тест'}</div>`;
+                html += `<div style="font-size: 0.8em; color: #6c757d; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${cmd.command}">${cmd.command.length > 50 ? cmd.command.substring(0, 50) + '...' : cmd.command}</div>`;
+                html += `</div>`;
+                html += `<button onclick="runTest('${safeCommand}', '${safeLabel}', '${testId}')" id="${testId}" style="background: #007bff; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 0.9em; white-space: nowrap; flex-shrink: 0;" title="Запустить тест">▶ Запустить</button>`;
+                html += `</div>`;
+                html += `</div>`;
+            }
+        });
+        html += `</div></div>`;
+    }
+    
     contentEl.innerHTML = html;
     detailsEl.style.display = 'block';
 }
 
+function getTestCommands(app) {
+    const commands = [];
+    const appName = (app.name || '').toLowerCase();
+    const appType = (app.app_type || '').toLowerCase();
+    const containerName = (app.container_name || '').toLowerCase();
+    
+    // BigBlueButton
+    if (appName.includes('bbb') || appName.includes('bigbluebutton') || 
+        (app.domains && app.domains.some(d => d.domain && d.domain.includes('school.cdto')))) {
+        commands.push({
+            label: 'E2E тестирование',
+            command: 'cd /home/cdto/DENKART/scripts/bbb-testing && python3 bbb_e2e_test.py'
+        });
+        commands.push({
+            label: 'Мониторинг',
+            command: 'cd /home/cdto/DENKART/scripts/bbb-testing && python3 bbb_monitoring_test.py'
+        });
+        commands.push({
+            label: 'Анализ DOM',
+            command: 'cd /home/cdto/DENKART/scripts/bbb-testing && python3 bbb_dom_analyzer.py'
+        });
+    }
+    
+    // Документация (docs-denkart или docs.cdto)
+    if (appName.includes('docs') || appType.includes('документация') || 
+        (app.domains && app.domains.some(d => d.domain && d.domain.includes('docs.cdto')))) {
+        commands.push({
+            label: 'Основной E2E тест',
+            command: 'cd /home/cdto/DENKART/scripts/docs-testing && python3 docs_e2e_test.py'
+        });
+        commands.push({
+            label: 'Анализ DOM',
+            command: 'cd /home/cdto/DENKART/scripts/docs-testing && python3 docs_dom_analyzer.py'
+        });
+        commands.push({
+            label: 'Тест авторизации',
+            command: 'cd /home/cdto/DENKART/scripts/docs-testing && python3 docs_auth_test.py'
+        });
+        commands.push({
+            label: 'Все тесты',
+            command: 'cd /home/cdto/DENKART/scripts/docs-testing && ./run_all_tests.sh'
+        });
+    }
+    
+    // Cockpit (denkart.cdto)
+    if ((app.domains && app.domains.some(d => d.domain && d.domain.includes('denkart.cdto'))) ||
+        appName.includes('cockpit')) {
+        commands.push({
+            label: 'Тест доступности',
+            command: 'cd /home/cdto/DENKART/scripts/docs-testing && python3 docs_e2e_test.py'
+        });
+        commands.push({
+            label: 'Примечание',
+            note: 'Укажите URL: https://denkart.cdto.life/ при запуске'
+        });
+    }
+    
+    // LXD контейнеры (общее тестирование)
+    if (app.type === 'lxd' || app.container_type) {
+        // Если это контейнер с документацией или BBB, команды уже добавлены выше
+        // Для других контейнеров можно добавить общие команды
+    }
+    
+    return commands.length > 0 ? commands : null;
+}
+
 function closeDetails() {
     document.getElementById('app-details').style.display = 'none';
+}
+
+function runTest(command, label, buttonId) {
+    // Отключаем кнопку на время запроса
+    const button = document.getElementById(buttonId);
+    if (!button) return;
+    
+    const originalText = button.textContent;
+    button.disabled = true;
+    button.textContent = '⏳ Запуск...';
+    button.style.background = '#6c757d';
+    
+    // Отправляем запрос на запуск теста
+    fetch('/api/test/run', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            command: command,
+            label: label
+        })
+    })
+    .then(response => {
+        // Проверяем Content-Type перед парсингом JSON
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            return response.text().then(text => {
+                throw new Error(`Ожидался JSON, получен: ${contentType || 'неизвестный тип'}. Ответ: ${text.substring(0, 200)}`);
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            button.textContent = '✅ Запущен';
+            button.style.background = '#28a745';
+            
+            // Через 3 секунды возвращаем исходное состояние
+            setTimeout(() => {
+                button.disabled = false;
+                button.textContent = originalText;
+                button.style.background = '#007bff';
+            }, 3000);
+            
+            alert(`Тест "${label}" успешно запущен!\n\nPID процесса: ${data.pid || 'N/A'}\n\nТест выполняется в фоновом режиме. Проверьте результаты в директории тестов.`);
+        } else {
+            button.disabled = false;
+            button.textContent = originalText;
+            button.style.background = '#dc3545';
+            alert(`Ошибка запуска теста: ${data.error || 'Неизвестная ошибка'}`);
+            setTimeout(() => {
+                button.style.background = '#007bff';
+            }, 2000);
+        }
+    })
+    .catch(error => {
+        button.disabled = false;
+        button.textContent = originalText;
+        button.style.background = '#dc3545';
+        alert(`Ошибка: ${error.message}`);
+        setTimeout(() => {
+            button.style.background = '#007bff';
+        }, 2000);
+    });
 }
 
 function refreshData() {
