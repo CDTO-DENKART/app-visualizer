@@ -5,18 +5,65 @@ let allAppsData = [];
 
 // Инициализация
 document.addEventListener('DOMContentLoaded', function() {
-    initNetwork();
-    loadData();
-    loadDomains();
-    setInterval(loadData, 60000); // Обновление каждую минуту
-    setInterval(loadDomains, 60000); // Обновление доменов каждую минуту
+    // Проверяем, что vis-network загружен
+    if (typeof vis === 'undefined' || !vis.Network || !vis.DataSet) {
+        console.error('vis-network не загружен!');
+        const statEl = document.getElementById('stat-total');
+        if (statEl) {
+            statEl.innerHTML = '<span style="color: #dc3545;">Ошибка: библиотека vis-network не загружена</span>';
+        }
+        const container = document.getElementById('network-container');
+        if (container) {
+            container.innerHTML = '<div style="padding: 40px; text-align: center; color: #dc3545;"><h3>Ошибка загрузки библиотеки</h3><p>Библиотека vis-network не загружена. Проверьте подключение к интернету.</p></div>';
+        }
+        return;
+    }
+    
+    // Проверяем, что контейнер существует
+    const container = document.getElementById('network-container');
+    if (!container) {
+        console.error('Контейнер network-container не найден в DOM');
+        return;
+    }
+    
+    try {
+        initNetwork();
+        loadData();
+        loadDomains();
+        setInterval(loadData, 60000); // Обновление каждую минуту
+        setInterval(loadDomains, 60000); // Обновление доменов каждую минуту
+    } catch (error) {
+        console.error('Ошибка инициализации:', error);
+        const statEl = document.getElementById('stat-total');
+        if (statEl) {
+            statEl.innerHTML = `<span style="color: #dc3545;">Ошибка инициализации: ${error.message}</span>`;
+        }
+        if (container) {
+            container.innerHTML = `<div style="padding: 40px; text-align: center; color: #dc3545;"><h3>Ошибка инициализации</h3><p>${error.message}</p><pre>${error.stack}</pre></div>`;
+        }
+    }
 });
 
 function initNetwork() {
     const container = document.getElementById('network-container');
     
-    nodes = new vis.DataSet();
-    edges = new vis.DataSet();
+    if (!container) {
+        console.error('initNetwork: контейнер network-container не найден');
+        return;
+    }
+    
+    if (typeof vis === 'undefined' || !vis.Network || !vis.DataSet) {
+        console.error('initNetwork: vis-network не доступен');
+        return;
+    }
+    
+    try {
+        nodes = new vis.DataSet();
+        edges = new vis.DataSet();
+    } catch (error) {
+        console.error('Ошибка создания DataSet:', error);
+        throw error;
+    }
     
     const data = {
         nodes: nodes,
@@ -118,7 +165,17 @@ function initNetwork() {
         }
     };
     
-    network = new vis.Network(container, data, options);
+    try {
+        network = new vis.Network(container, data, options);
+        
+        if (!network) {
+            throw new Error('Не удалось создать vis.Network');
+        }
+    } catch (error) {
+        console.error('Ошибка создания vis.Network:', error);
+        container.innerHTML = `<div style="padding: 40px; text-align: center; color: #dc3545;"><h3>Ошибка создания визуализации</h3><p>${error.message}</p></div>`;
+        throw error;
+    }
     
     // Автоматическое масштабирование после стабилизации для предотвращения перекрытий
     network.on('stabilizationEnd', function() {
@@ -141,19 +198,64 @@ function initNetwork() {
             closeDetails();
         }
     });
+    
+    // Обработка ошибок визуализации
+    network.on('stabilizationFailed', function() {
+        console.warn('Стабилизация сети не завершена');
+    });
 }
 
 function loadData() {
+    const statEl = document.getElementById('stat-total');
+    statEl.textContent = 'Загрузка...';
+    
     fetch('/api/apps')
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                return response.text().then(text => {
+                    throw new Error(`Ожидался JSON, получен: ${contentType}. Ответ: ${text.substring(0, 200)}`);
+                });
+            }
+            return response.json();
+        })
         .then(data => {
+            if (!data) {
+                throw new Error('Пустой ответ от сервера');
+            }
+            
             allAppsData = data.applications || [];
             updateStats(data.statistics);
+            
+            if (!nodes || !edges || !network) {
+                console.error('Network не инициализирован');
+                statEl.textContent = 'Ошибка: Network не инициализирован';
+                return;
+            }
+            
             updateNetwork();
             updateLastUpdate();
         })
         .catch(error => {
             console.error('Ошибка загрузки данных:', error);
+            statEl.innerHTML = `<span style="color: #dc3545;">Ошибка загрузки: ${error.message}</span>`;
+            
+            // Показываем сообщение об ошибке в области визуализации
+            const container = document.getElementById('network-container');
+            if (container) {
+                container.innerHTML = `
+                    <div style="padding: 40px; text-align: center; color: #dc3545;">
+                        <h3>Ошибка загрузки данных</h3>
+                        <p>${error.message}</p>
+                        <button onclick="refreshData()" style="margin-top: 20px; padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                            Обновить
+                        </button>
+                    </div>
+                `;
+            }
         });
 }
 
@@ -200,7 +302,25 @@ function updateNetwork() {
 }
 
 function renderNetwork(apps) {
-    const hostIp = apps[0]?.host_ip || '192.168.1.112';
+    // Проверяем, что network инициализирован
+    if (!nodes || !edges || !network) {
+        console.error('renderNetwork: Network не инициализирован');
+        return;
+    }
+    
+    // Проверяем, что apps - это массив
+    if (!Array.isArray(apps)) {
+        console.error('renderNetwork: apps не является массивом', apps);
+        return;
+    }
+    
+    // Получаем host_ip из данных
+    let hostIp = '192.168.1.112';
+    if (apps.length > 0 && apps[0].host_ip) {
+        hostIp = apps[0].host_ip;
+    } else if (allAppsData.length > 0 && allAppsData[0].host_ip) {
+        hostIp = allAppsData[0].host_ip;
+    }
     
     // Очищаем данные
     nodes.clear();
