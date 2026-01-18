@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Архитектура сервера</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+</head>
+<body>
+    <div class="header">
+        <h1>🏗️ Визуализатор приложений сервера</h1>
+        <div class="stats" id="stats">
+            <span id="stat-total">Загрузка...</span>
+        </div>
+        <button class="btn-refresh" onclick="refreshData()">🔄 Обновить</button>
+        <div class="last-update" id="last-update"></div>
+    </div>
+    
+    <div class="main-layout">
+        <div class="container">
+            <div class="controls">
+                <div class="filter-group">
+                    <label>
+                        <input type="checkbox" id="filter-docker" checked onchange="updateFilter()">
+                        Docker
+                    </label>
+                    <label>
+                        <input type="checkbox" id="filter-lxd" checked onchange="updateFilter()">
+                        LXD
+                    </label>
+                    <label>
+                        <input type="checkbox" id="filter-host" checked onchange="updateFilter()">
+                        Хост
+                    </label>
+                    <label>
+                        <input type="checkbox" id="filter-running" checked onchange="updateFilter()">
+                        Только запущенные
+                    </label>
+                </div>
+            </div>
+            
+            <div class="visualization-section">
+                <div id="network-container"></div>
+                
+                <div class="legend">
+                    <h4>Условные обозначения</h4>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #667eea;"></div>
+                        <span>Хост-сервер</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #28a745;"></div>
+                        <span>Docker контейнеры</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #ffc107;"></div>
+                        <span>LXD контейнеры</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #17a2b8;"></div>
+                        <span>Приложения в LXD</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #6c757d;"></div>
+                        <span>Системные сервисы</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="domains-panel">
+            <h3>🌐 Домены сервера</h3>
+            <div class="domains-section">
+                <h4 class="domains-title active">✅ Активные домены</h4>
+                <div id="domains-active" class="domains-list"></div>
+            </div>
+            <div class="domains-section">
+                <h4 class="domains-title planned">⏳ Запланированные домены</h4>
+                <div id="domains-planned" class="domains-list"></div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="app-details" class="details-panel" style="display: none;">
+        <h3>Детали приложения</h3>
+        <div id="app-details-content"></div>
+        <button onclick="closeDetails()">Закрыть</button>
+    </div>
+    
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

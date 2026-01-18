@@ -1,0 +1,15 @@
+[Unit]
+Description=Server Architecture - Архитектура сервера
+After=network.target docker.service
+
+[Service]
+Type=simple
+User=cdto
+WorkingDirectory=/home/cdto/app-visualizer
+Environment="PATH=/usr/bin:/usr/local/bin"
+ExecStart=/home/cdto/app-visualizer/start.sh
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
