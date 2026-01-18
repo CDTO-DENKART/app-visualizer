@@ -123,14 +123,33 @@ def run_test():
         if cwd and not Path(cwd).exists():
             return jsonify({'error': f'Директория не найдена: {cwd}'}), 400
         
-        # Проверяем существование скрипта
+        # Проверяем существование скрипта (но не системных команд)
+        # Системные команды (python3, bash, sh и т.д.) находятся в PATH
+        system_commands = ['python3', 'python', 'bash', 'sh', 'node', 'npm']
         if cmd and len(cmd) > 0:
-            script_path = Path(cmd[0])
-            if not script_path.is_absolute() and cwd:
-                script_path = Path(cwd) / script_path
-            
-            if not script_path.exists():
-                return jsonify({'error': f'Скрипт не найден: {script_path}'}), 400
+            first_arg = cmd[0]
+            # Проверяем только если это не системная команда и есть второй аргумент (скрипт)
+            if first_arg not in system_commands and len(cmd) > 1:
+                # Проверяем первый аргумент как скрипт
+                script_path = Path(first_arg)
+                if not script_path.is_absolute() and cwd:
+                    script_path = Path(cwd) / script_path
+                if not script_path.exists():
+                    return jsonify({'error': f'Скрипт не найден: {script_path}'}), 400
+            elif first_arg in system_commands and len(cmd) > 1:
+                # Если это системная команда, проверяем второй аргумент (скрипт)
+                script_path = Path(cmd[1])
+                if not script_path.is_absolute() and cwd:
+                    script_path = Path(cwd) / script_path
+                if not script_path.exists():
+                    return jsonify({'error': f'Скрипт не найден: {script_path}'}), 400
+            elif first_arg not in system_commands:
+                # Если это не системная команда и нет второго аргумента, проверяем первый как скрипт
+                script_path = Path(first_arg)
+                if not script_path.is_absolute() and cwd:
+                    script_path = Path(cwd) / script_path
+                if not script_path.exists():
+                    return jsonify({'error': f'Скрипт не найден: {script_path}'}), 400
         
         # Запускаем тест в фоновом режиме
         try:
