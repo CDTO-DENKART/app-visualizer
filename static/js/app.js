@@ -98,7 +98,7 @@ function initNetwork() {
                 }
             }
         },
-            edges: {
+        edges: {
             arrows: {
                 to: {
                     enabled: true,
